@@ -1,42 +1,52 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.produto import ProdutoModel
 from app.schemas.produto import ProdutoCreate, ProdutoUpdate
 
 class ProdutoService:
-    def __init__(self) -> None:
-        # Simulando um repositório / tabela
-        self._banco: dict[int, dict] = {}
-        self._contador_id: int = 0
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    def listar(self, limit: int = 10, offset: int = 0) -> list[dict]:
-        todos = list(self._banco.values())
-        return todos[offset : offset + limit]
+    async def listar(self, limit: int = 10, offset: int = 0) -> list[ProdutoModel]:
+        query = select(ProdutoModel).offset(offset).limit(limit)
+        result = await self.session.execute(query)
+        # .scalars().all() extrai os objetos ProdutoModel da tupla de resultados
+        return list(result.scalars().all())
 
-    def obter_por_id(self, produto_id: int) -> dict | None:
-        return self._banco.get(produto_id)
+    async def obter_por_id(self, produto_id: int) -> ProdutoModel | None:
+        query = select(ProdutoModel).where(ProdutoModel.id == produto_id)
+        result = await self.session.execute(query)
+        # scalar_one_or_none() equivale ao FirstOrDefaultAsync() do EF Core
+        return result.scalar_one_or_none()
 
-    def criar(self, dados: ProdutoCreate) -> dict:
-        self._contador_id += 1
-        novo = {"id": self._contador_id, **dados.model_dump()}
-        self._banco[self._contador_id] = novo
-        return novo
+    async def criar(self, dados: ProdutoCreate) -> ProdutoModel:
+        # Cria a instância do Model ORM a partir do schema validado
+        novo_produto = ProdutoModel(**dados.model_dump())
+        self.session.add(novo_produto)
+        await self.session.commit()
+        # Faz o refresh para obter o id gerado pelo autoincrement do banco
+        await self.session.refresh(novo_produto)
+        return novo_produto
 
-    def atualizar(self, produto_id: int, dados: ProdutoUpdate) -> dict | None:
-        produto = self.obter_por_id(produto_id)
+    async def atualizar(self, produto_id: int, dados: ProdutoUpdate) -> ProdutoModel | None:
+        produto = await self.obter_por_id(produto_id)
         if produto is None:
             return None
-        
+
+        # Pega apenas os campos enviados pelo cliente
         alteracoes = dados.model_dump(exclude_unset=True)
-        produto.update(alteracoes)
+        for campo, valor in alteracoes.items():
+            setattr(produto, campo, valor)
+
+        await self.session.commit()
+        await self.session.refresh(produto)
         return produto
 
-    def deletar(self, produto_id: int) -> bool:
-        if produto_id in self._banco:
-            del self._banco[produto_id]
-            return True
-        return False
+    async def deletar(self, produto_id: int) -> bool:
+        produto = await self.obter_por_id(produto_id)
+        if produto is None:
+            return False
 
-# Instância única para simular um serviço Singleton/Scoped na memória
-_instancia_singleton = ProdutoService()
-
-def get_produto_service() -> ProdutoService:
-    """Função de fábrica usada pela Injeção de Dependências."""
-    return _instancia_singleton
+        await self.session.delete(produto)
+        await self.session.commit()
+        return True

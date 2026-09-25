@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import tarefas
+from app.routers import tarefas, auth
 
 app = FastAPI(
     title="Lista de Tarefas - Arquitetura em Camadas",
@@ -7,6 +7,7 @@ app = FastAPI(
 )
 
 # Registra o Router (como registrar Controllers no ASP.NET)
+app.include_router(auth.router)
 app.include_router(tarefas.router)
 
 @app.get("/")

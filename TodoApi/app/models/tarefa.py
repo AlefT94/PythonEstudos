@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Float, Integer, String
+from sqlalchemy import Boolean, Float, Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database.connection import Base
 
@@ -10,3 +10,7 @@ class TarefaModel(Base):
     descricao: Mapped[str | None] = mapped_column(String(255), nullable=True)
     concluida : Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     prioridade : Mapped[int] = mapped_column(Integer,nullable=False,default=1)
+
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=False
+    )
